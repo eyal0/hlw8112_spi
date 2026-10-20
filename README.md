@@ -72,13 +72,12 @@ Later firmware updates can use ESPHome OTA. The first install has to go through 
 
 ## Configuration
 
-Copy `components/` next to your YAML and load it as a local external component, as `t1-u-hl.yaml` does. Every sensor is optional.
+Other configs can load the component from GitHub. ESPHome clones it at compile time; there is no separate library to build or copy.
 
 ```yaml
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://eyal0/hlw8112_spi@main
+    components: [hlw8112_spi]
 
 hlw8112_spi:
   cs_pin: P21
@@ -88,6 +87,8 @@ hlw8112_spi:
   voltage_ratio: 1.0
   meter_channel: A
 ```
+
+`t1-u-hl.yaml` in this repo keeps `source: type: local` so a compile here uses the files in the checkout. ESPHome caches the GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
