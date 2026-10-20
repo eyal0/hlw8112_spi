@@ -50,6 +50,9 @@ hlw8112_spi:
     name: Power A
   power_b:
     name: Power B
+  # Volt-amps for meter_channel only. The chip has one apparent-power register,
+  # so this follows channel A until meter_channel is set to B. Power factor uses
+  # that same channel.
   apparent_power:
     name: Apparent Power
   power_factor:
