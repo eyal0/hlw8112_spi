@@ -105,42 +105,43 @@ wifi:
 bk72xx_spi:
   id: spi_bus
 
-hlw8112_spi:
-  id: meter
-  spi_id: spi_bus
-  cs_pin: P21
-  update_interval: 2s
-  # K1 / K2 from the HLW8112 calibration-free formulas. These match the
-  # clamp-meter ratios used by the OpenBeken driver. Raise a current ratio
-  # if that channel reads high.  These are the default values so you can omit them if you want.
-  current_ratio_a: 0.2
-  current_ratio_b: 0.2
-  voltage_ratio: 1.0
-  meter_channel: A
+sensor:
+  - platform: hlw8112_spi
+    id: meter
+    spi_id: spi_bus
+    cs_pin: P21
+    update_interval: 2s
+    # K1 / K2 from the HLW8112 calibration-free formulas. These match the
+    # clamp-meter ratios used by the OpenBeken driver. Raise a current ratio
+    # if that channel reads high.  These are the default values so you can omit them if you want.
+    current_ratio_a: 0.2
+    current_ratio_b: 0.2
+    voltage_ratio: 1.0
+    meter_channel: A
 
-  voltage:
-    name: Voltage
-  frequency:
-    name: Frequency
-  current_a:
-    name: Current A
-  current_b:
-    name: Current B
-  power_a:
-    name: Power A
-  power_b:
-    name: Power B
-  # Volt-amps for meter_channel only. The chip has one apparent-power register,
-  # so this follows channel A until meter_channel is set to B. Power factor uses
-  # that same channel.
-  apparent_power:
-    name: Apparent Power
-  power_factor:
-    name: Power Factor
-  energy_a:
-    name: Energy A
-  energy_b:
-    name: Energy B
+    voltage:
+      name: Voltage
+    frequency:
+      name: Frequency
+    current_a:
+      name: Current A
+    current_b:
+      name: Current B
+    power_a:
+      name: Power A
+    power_b:
+      name: Power B
+    # Volt-amps for meter_channel only. The chip has one apparent-power register,
+    # so this follows channel A until meter_channel is set to B. Power factor uses
+    # that same channel.
+    apparent_power:
+      name: Apparent Power
+    power_factor:
+      name: Power Factor
+    energy_a:
+      name: Energy A
+    energy_b:
+      name: Energy B
 
 button:
   - platform: template
@@ -159,7 +160,7 @@ button:
 
 `t1-u-hl.yaml` in this repo keeps `source: type: local` so a compile here uses the files in the checkout. ESPHome caches the GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
 
-SCK, MOSI, and MISO belong to the one `bk72xx_spi` bus. Another chip uses that same `spi_id` and its own `cs_pin`. Its driver calls `transfer()` with the clock and SPI mode that chip requires.
+SCK, MOSI, and MISO belong to the one `bk72xx_spi` bus. A second HLW8112 is another `sensor` entry with its own `cs_pin`. Another kind of chip uses that same `spi_id` and its own `cs_pin`. Its driver calls `transfer()` with the clock and SPI mode that chip requires.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
