@@ -2,7 +2,9 @@
 
 #include "esphome/core/component.h"
 #include "esphome/core/hal.h"
+#include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
+#include "esphome/components/bk72xx_spi/bk72xx_spi.h"
 #include "esphome/components/sensor/sensor.h"
 
 namespace esphome::hlw8112_spi {
@@ -16,7 +18,7 @@ struct EnergyStore {
   double export_b;
 };
 
-class HLW8112SPI : public PollingComponent {
+class HLW8112SPI : public PollingComponent, public Parented<bk72xx_spi::BK72xxSPI> {
  public:
   void set_cs_pin(GPIOPin *pin) { this->cs_pin_ = pin; }
   void set_spi_frequency(uint32_t frequency) { this->spi_frequency_ = frequency; }
@@ -90,7 +92,6 @@ class HLW8112SPI : public PollingComponent {
   uint8_t updates_since_save_{0};
   uint8_t consecutive_failures_{0};
 
-  bool init_controller_();
   bool configure_chip_();
   bool load_coefficients_();
   bool read_register_(uint8_t address, uint32_t *value, uint8_t size);

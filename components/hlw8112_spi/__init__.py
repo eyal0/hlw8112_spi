@@ -1,10 +1,12 @@
 from esphome import pins
 import esphome.codegen as cg
-from esphome.components import libretiny, sensor
+from esphome.components import sensor
+from esphome.components.bk72xx_spi import BK72xxSPI
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_FREQUENCY,
     CONF_ID,
+    CONF_SPI_ID,
     CONF_PHASE_ANGLE,
     CONF_POWER_FACTOR,
     CONF_VOLTAGE,
@@ -27,7 +29,7 @@ from esphome.const import (
 )
 from esphome.types import ConfigType
 
-DEPENDENCIES = ["libretiny"]
+DEPENDENCIES = ["bk72xx_spi"]
 AUTO_LOAD = ["sensor"]
 
 CONF_CS_PIN = "cs_pin"
@@ -48,7 +50,7 @@ CONF_ENERGY_EXPORT_A = "energy_export_a"
 CONF_ENERGY_EXPORT_B = "energy_export_b"
 
 hlw8112_spi_ns = cg.esphome_ns.namespace("hlw8112_spi")
-HLW8112SPI = hlw8112_spi_ns.class_("HLW8112SPI", cg.PollingComponent)
+HLW8112SPI = hlw8112_spi_ns.class_("HLW8112SPI", cg.PollingComponent, cg.Parented.template(BK72xxSPI))
 
 
 def _measurement(unit: str, accuracy: int, device_class: str):
@@ -73,6 +75,7 @@ CONFIG_SCHEMA = cv.All(
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(HLW8112SPI),
+            cv.GenerateID(CONF_SPI_ID): cv.use_id(BK72xxSPI),
             cv.Required(CONF_CS_PIN): pins.gpio_output_pin_schema,
             cv.Optional(CONF_SPI_FREQUENCY, default=500000): cv.int_range(min=100000, max=900000),
             cv.Optional(CONF_CHIP_CLOCK, default=3579545): cv.int_range(min=1000000, max=6000000),
@@ -102,17 +105,14 @@ CONFIG_SCHEMA = cv.All(
             cv.Optional(CONF_ENERGY_EXPORT_A): _energy(),
             cv.Optional(CONF_ENERGY_EXPORT_B): _energy(),
         }
-    )
-    .extend(cv.polling_component_schema("10s")),
-    libretiny.only_on_family(
-        supported=[libretiny.const.FAMILY_BK7238, libretiny.const.FAMILY_BK7231N]
-    ),
+    ).extend(cv.polling_component_schema("10s")),
 )
 
 
 async def to_code(config: ConfigType) -> None:
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
+    await cg.register_parented(var, config[CONF_SPI_ID])
 
     pin = await cg.gpio_pin_expression(config[CONF_CS_PIN])
     cg.add(var.set_cs_pin(pin))

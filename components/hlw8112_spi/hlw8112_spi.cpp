@@ -10,14 +10,7 @@ static const char *const TAG = "hlw8112_spi";
 
 static constexpr uint32_t ENERGY_MAGIC = 0x484C5731;
 static constexpr uint8_t SAVE_EVERY_UPDATES = 30;
-static constexpr size_t SPI_MAX_TRANSFER = 16;
-
-static void wait_us(uint32_t us) {
-  const uint32_t cycles = (arch_get_cpu_freq_hz() / 1000000u) * us;
-  const uint32_t start = arch_get_cpu_cycle_count();
-  while ((arch_get_cpu_cycle_count() - start) < cycles) {
-  }
-}
+static constexpr uint8_t SPI_MODE = 2;
 
 static constexpr uint8_t REG_SYSCON = 0x00;
 static constexpr uint8_t REG_EMUCON = 0x01;
@@ -68,152 +61,12 @@ static int32_t sign_extend_24(uint32_t value) {
   return static_cast<int32_t>(value);
 }
 
-#ifdef USE_BK72XX
-
-extern "C" {
-#include "rtos_pub.h"
-#include "arm_arch.h"
-#include "drv_model_pub.h"
-#include "gpio_pub.h"
-#include "icu_pub.h"
-}
-
-// BK7231N/BK7238 SPI master. LibreTiny builds the Beken driver with CFG_USE_SPI=0,
-// so bk_spi_master_xfer() is not linked. These are the registers from spi_bk7231n.h.
-// The included SDK headers may define the older BK7231U map under the same names.
-#undef SPI_BASE
-#undef SPI_CTRL
-#undef SPI_CONFIG
-#undef SPI_STAT
-#undef SPI_DAT
-static constexpr uint32_t SPI_BASE = 0x00802700;
-static constexpr uint32_t SPI_CTRL = SPI_BASE + 0 * 4;
-static constexpr uint32_t SPI_CONFIG = SPI_BASE + 1 * 4;
-static constexpr uint32_t SPI_STAT = SPI_BASE + 2 * 4;
-static constexpr uint32_t SPI_DAT = SPI_BASE + 3 * 4;
-
-static constexpr uint32_t SPI_CKR_POS = 8;
-static constexpr uint32_t SPI_NSS_3WIRE = 1u << 17;
-static constexpr uint32_t SPI_CKPOL = 1u << 20;
-static constexpr uint32_t SPI_MSTEN = 1u << 22;
-static constexpr uint32_t SPI_ENABLE = 1u << 23;
-static constexpr uint32_t SPI_BYTE_INTERVAL_POS = 24;
-
-static constexpr uint32_t SPI_TX_ENABLE = 1u << 0;
-static constexpr uint32_t SPI_RX_ENABLE = 1u << 1;
-static constexpr uint32_t SPI_TX_LEN_POS = 8;
-static constexpr uint32_t SPI_RX_LEN_POS = 20;
-
-static constexpr uint32_t SPI_TX_FIFO_WRITABLE = 1u << 1;
-static constexpr uint32_t SPI_RX_FIFO_READABLE = 1u << 2;
-static constexpr uint32_t SPI_TX_FIFO_CLEAR = 1u << 16;
-
-static constexpr uint32_t SPI_SOURCE_HZ = 26000000;
-
-static bool fifo_transfer(const uint8_t *tx, uint8_t *rx, size_t length) {
-  // TX clear is a write to the status bit. RX is emptied by reading; the clear
-  // bit is not what the Beken driver uses and must not be left set.
-  uint32_t status = REG_READ(SPI_STAT);
-  REG_WRITE(SPI_STAT, status | SPI_TX_FIFO_CLEAR);
-  while ((REG_READ(SPI_STAT) & SPI_RX_FIFO_READABLE) != 0) {
-    (void) REG_READ(SPI_DAT);
-  }
-
-  for (size_t i = 0; i < length; i++) {
-    const uint32_t start = millis();
-    while ((REG_READ(SPI_STAT) & SPI_TX_FIFO_WRITABLE) == 0) {
-      if (millis() - start > 20) {
-        return false;
-      }
-    }
-    REG_WRITE(SPI_DAT, tx[i]);
-  }
-
-  uint32_t config = REG_READ(SPI_CONFIG);
-  config &= ~((0xFFFu << SPI_TX_LEN_POS) | (0xFFFu << SPI_RX_LEN_POS) | SPI_TX_ENABLE | SPI_RX_ENABLE);
-  config |= (static_cast<uint32_t>(length) << SPI_TX_LEN_POS) | (static_cast<uint32_t>(length) << SPI_RX_LEN_POS);
-  REG_WRITE(SPI_CONFIG, config);
-  config |= SPI_TX_ENABLE | SPI_RX_ENABLE;
-  REG_WRITE(SPI_CONFIG, config);
-
-  size_t received = 0;
-  const uint32_t start = millis();
-  while (received < length) {
-    if ((REG_READ(SPI_STAT) & SPI_RX_FIFO_READABLE) != 0) {
-      const uint8_t byte = static_cast<uint8_t>(REG_READ(SPI_DAT) & 0xFF);
-      if (rx != nullptr) {
-        rx[received] = byte;
-      }
-      received++;
-    } else if (millis() - start > 20) {
-      config = REG_READ(SPI_CONFIG);
-      config &= ~(SPI_TX_ENABLE | SPI_RX_ENABLE);
-      REG_WRITE(SPI_CONFIG, config);
-      return false;
-    }
-  }
-
-  config = REG_READ(SPI_CONFIG);
-  config &= ~(SPI_TX_ENABLE | SPI_RX_ENABLE);
-  REG_WRITE(SPI_CONFIG, config);
-  return true;
-}
-
-bool HLW8112SPI::init_controller_() {
-  uint32_t value = PCLK_POSI_SPI;
-  sddev_control(ICU_DEV_NAME, CMD_CONF_PCLK_26M, &value);
-  value = PWD_SPI_CLK_BIT;
-  sddev_control(ICU_DEV_NAME, CMD_CLK_PWR_UP, &value);
-
-  // SCK = P14, MOSI = P16, MISO = P17. Chip select stays a GPIO (P21 on T1-U-HL).
-  value = GFUNC_MODE_SPI_GPIO_14;
-  sddev_control(GPIO_DEV_NAME, CMD_GPIO_ENABLE_SECOND, &value);
-  value = GFUNC_MODE_SPI_GPIO_16_17;
-  sddev_control(GPIO_DEV_NAME, CMD_GPIO_ENABLE_SECOND, &value);
-
-  // Round the divider up so the clock never runs faster than requested.
-  // 500 kHz lands on divider 26. 900 kHz lands on 866.7 kHz, under MCLK/4.
-  uint32_t divider = (SPI_SOURCE_HZ / 2u + this->spi_frequency_ - 1u) / this->spi_frequency_;
-  if (divider < 2) {
-    divider = 2;
-  } else if (divider > 255) {
-    divider = 255;
-  }
-  const uint32_t actual = (SPI_SOURCE_HZ / 2u) / divider;
-
-  // Mode 2: clock idles high, slave samples MOSI on the falling edge. 8-bit MSB first, no hardware CS.
-  uint32_t control = SPI_MSTEN | SPI_ENABLE | SPI_CKPOL | SPI_NSS_3WIRE;
-  control |= divider << SPI_CKR_POS;
-  control |= 2u << SPI_BYTE_INTERVAL_POS;
-  REG_WRITE(SPI_CTRL, control);
-  REG_WRITE(SPI_CONFIG, 0);
-
-  ESP_LOGCONFIG(TAG, "SPI master on P14/P16/P17 at %" PRIu32 " Hz", actual);
-  return true;
-}
-
-#else
-
-static bool fifo_transfer(const uint8_t *, uint8_t *, size_t) { return false; }
-
-bool HLW8112SPI::init_controller_() {
-  ESP_LOGE(TAG, "HLW8112 SPI requires the BK7238 or BK7231N");
-  return false;
-}
-
-#endif
-
 bool HLW8112SPI::transact_(const uint8_t *tx, uint8_t *rx, size_t length) {
-  if (length == 0 || length > SPI_MAX_TRANSFER || this->cs_pin_ == nullptr) {
+  if (length == 0 || this->parent_ == nullptr || this->cs_pin_ == nullptr) {
     return false;
   }
-  this->cs_pin_->digital_write(false);
-  wait_us(2);
-  const bool ok = fifo_transfer(tx, rx, length);
-  wait_us(2);
-  this->cs_pin_->digital_write(true);
-  wait_us(2);
-  return ok;
+  // Mode 2: the HLW8112 samples MOSI on the falling edge and drives MISO on the rising edge.
+  return this->parent_->transfer(this->cs_pin_, this->spi_frequency_, SPI_MODE, tx, rx, length);
 }
 
 bool HLW8112SPI::command_(uint8_t command) {
@@ -346,7 +199,12 @@ void HLW8112SPI::setup() {
     this->energy_.magic = ENERGY_MAGIC;
   }
 
-  if (!this->init_controller_() || !this->configure_chip_() || !this->load_coefficients_()) {
+  if (this->parent_ == nullptr || !this->parent_->is_ready()) {
+    ESP_LOGE(TAG, "SPI bus is not ready");
+    this->mark_failed();
+    return;
+  }
+  if (!this->configure_chip_() || !this->load_coefficients_()) {
     this->mark_failed();
     return;
   }
@@ -514,7 +372,6 @@ void HLW8112SPI::on_shutdown() { this->save_energy_(true); }
 void HLW8112SPI::dump_config() {
   ESP_LOGCONFIG(TAG, "HLW8112 SPI:");
   LOG_PIN("  CS Pin: ", this->cs_pin_);
-  ESP_LOGCONFIG(TAG, "  SCK: P14  MOSI: P16  MISO: P17");
   ESP_LOGCONFIG(TAG, "  Shared channel: %s", this->channel_b_ ? "B" : "A");
   ESP_LOGCONFIG(TAG, "  Current ratio A/B: %.4f / %.4f", this->current_ratio_a_, this->current_ratio_b_);
   ESP_LOGCONFIG(TAG, "  Voltage ratio: %.4f", this->voltage_ratio_);

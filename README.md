@@ -2,7 +2,7 @@
 
 ESPHome component for an HLW8112 energy meter wired to the SPI controller of a Beken BK7238 or BK7231N. `t1-u-hl.yaml` is a working config for the Tuya T1-U-HL module.
 
-ESPHome's `spi:` component does not support LibreTiny, and the Beken SDK leaves its SPI driver unlinked. This component programs the BK7238/BK7231N SPI controller directly. It does not bit-bang the bus.
+ESPHome's `spi:` component does not support LibreTiny, and the Beken SDK leaves its SPI driver unlinked. `bk72xx_spi` programs the BK7238/BK7231N SPI controller directly. `hlw8112_spi` is the meter on that bus. It does not bit-bang the bus.
 
 Some of these meter boards tie digital ground to mains. Treat every pin as live.
 
@@ -89,7 +89,7 @@ bk72xx:
 
 external_components:
   - source: github://eyal0/hlw8112_spi@main
-    components: [hlw8112_spi]
+    components: [bk72xx_spi, hlw8112_spi]
 
 logger:
 
@@ -102,8 +102,12 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+bk72xx_spi:
+  id: spi_bus
+
 hlw8112_spi:
   id: meter
+  spi_id: spi_bus
   cs_pin: P21
   update_interval: 2s
   # K1 / K2 from the HLW8112 calibration-free formulas. These match the
@@ -155,8 +159,11 @@ button:
 
 `t1-u-hl.yaml` in this repo keeps `source: type: local` so a compile here uses the files in the checkout. ESPHome caches the GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
 
+SCK, MOSI, and MISO belong to the one `bk72xx_spi` bus. Another chip uses that same `spi_id` and its own `cs_pin`. Its driver calls `transfer()` with the clock and SPI mode that chip requires.
+
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `spi_id` | the only `bk72xx_spi` | Bus this meter uses. |
 | `cs_pin` | required | GPIO connected to SCSN. |
 | `update_interval` | `10s` | How often registers are read. The example uses `2s`. |
 | `spi_frequency` | `500000` | SPI clock, from 100 kHz to 900 kHz. The actual clock is rounded down so it never runs faster than requested. |

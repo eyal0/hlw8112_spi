@@ -26,8 +26,12 @@ wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
 
+bk72xx_spi:
+  id: spi_bus
+
 hlw8112_spi:
   id: meter
+  spi_id: spi_bus
   cs_pin: P21
   update_interval: 2s
   # K1 / K2 from the HLW8112 calibration-free formulas. These match the
