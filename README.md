@@ -75,17 +75,82 @@ Later firmware updates can use ESPHome OTA. The first install has to go through 
 Other configs can load the component from GitHub. ESPHome clones it at compile time; there is no separate library to build or copy.
 
 ```yaml
+# T1-U-HL (BK7238) with the HLW8112 on the chip's SPI pins.
+# SCK P14, MOSI P16, and MISO P17 are owned by the SPI controller.
+# SCSN is module pin 19, which is P21 on this module (GPIO9 on the older CBU).
+#
+# Some of these meter boards tie digital ground to mains. Treat every pin as live.
+
+esphome:
+  name: hlw8112-meter
+
+bk72xx:
+  board: t1-u
+
 external_components:
   - source: github://eyal0/hlw8112_spi@main
     components: [hlw8112_spi]
 
+logger:
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
 hlw8112_spi:
+  id: meter
   cs_pin: P21
   update_interval: 2s
+  # K1 / K2 from the HLW8112 calibration-free formulas. These match the
+  # clamp-meter ratios used by the OpenBeken driver. Raise a current ratio
+  # if that channel reads high.  These are the default values so you can omit them if you want.
   current_ratio_a: 0.2
   current_ratio_b: 0.2
   voltage_ratio: 1.0
   meter_channel: A
+
+  voltage:
+    name: Voltage
+  frequency:
+    name: Frequency
+  current_a:
+    name: Current A
+  current_b:
+    name: Current B
+  power_a:
+    name: Power A
+  power_b:
+    name: Power B
+  # Volt-amps for meter_channel only. The chip has one apparent-power register,
+  # so this follows channel A until meter_channel is set to B. Power factor uses
+  # that same channel.
+  apparent_power:
+    name: Apparent Power
+  power_factor:
+    name: Power Factor
+  energy_a:
+    name: Energy A
+  energy_b:
+    name: Energy B
+
+button:
+  - platform: template
+    name: Reset energy A
+    on_press:
+      then:
+        - lambda: id(meter).reset_energy_a();
+  - platform: template
+    name: Reset energy B
+    on_press:
+      then:
+        - lambda: id(meter).reset_energy_b();
+
+
 ```
 
 `t1-u-hl.yaml` in this repo keeps `source: type: local` so a compile here uses the files in the checkout. ESPHome caches the GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
