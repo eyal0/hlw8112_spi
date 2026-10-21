@@ -13,7 +13,12 @@ bk72xx:
 external_components:
   - source:
       type: local
+      path: ../bk72xx_spi/components
+    components: [bk72xx_spi]
+  - source:
+      type: local
       path: components
+    components: [hlw8112_spi]
 
 logger:
 

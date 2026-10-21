@@ -2,7 +2,7 @@
 
 ESPHome component for an HLW8112 energy meter wired to the SPI controller of a Beken BK7238 or BK7231N. `t1-u-hl.yaml` is a working config for the Tuya T1-U-HL module.
 
-ESPHome's `spi:` component does not support LibreTiny, and the Beken SDK leaves its SPI driver unlinked. `bk72xx_spi` programs the BK7238/BK7231N SPI controller directly. `hlw8112_spi` is the meter on that bus. It does not bit-bang the bus.
+ESPHome's `spi:` component does not support LibreTiny, and the Beken SDK leaves its SPI driver unlinked. The SPI controller is the separate [`bk72xx_spi`](https://github.com/eyal0/bk72xx_spi) component. `hlw8112_spi` is the meter on that bus. It does not bit-bang the bus.
 
 Some of these meter boards tie digital ground to mains. Treat every pin as live.
 
@@ -88,8 +88,10 @@ bk72xx:
   board: t1-u
 
 external_components:
+  - source: github://eyal0/bk72xx_spi@main
+    components: [bk72xx_spi]
   - source: github://eyal0/hlw8112_spi@main
-    components: [bk72xx_spi, hlw8112_spi]
+    components: [hlw8112_spi]
 
 logger:
 
@@ -158,7 +160,7 @@ button:
 
 ```
 
-`t1-u-hl.yaml` in this repo keeps `source: type: local` so a compile here uses the files in the checkout. ESPHome caches the GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
+`t1-u-hl.yaml` in this repo loads `hlw8112_spi` from this checkout and `bk72xx_spi` from a sibling `../bk72xx_spi` checkout. ESPHome caches a GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
 
 SCK, MOSI, and MISO belong to the one `bk72xx_spi` bus. A second HLW8112 is another `sensor` entry with its own `cs_pin`. Another kind of chip uses that same `spi_id` and its own `cs_pin`. Its driver calls `transfer()` with the clock and SPI mode that chip requires.
 
