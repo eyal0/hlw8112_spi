@@ -17,6 +17,10 @@ The SPI controller owns the clock and data pins. Chip select is a normal GPIO be
 | MISO | P17 | Module pin 20. Fixed by the component. |
 | SCSN | P21 | Module pin 19. Set with `cs_pin`. GPIO9 on the older CBU. |
 
+![Top of the T1-U-HL module on the HLW8112 board](docs/top.png)
+
+![Bottom of the board](docs/bottom.png)
+
 SPI mode is mode 2: clock idle high, MSB first. The default clock is 500 kHz.
 
 ## Build
