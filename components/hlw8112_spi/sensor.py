@@ -136,14 +136,16 @@ async def to_code(config: ConfigType) -> None:
     cg.add(var.set_current_ratio_b(config[CONF_CURRENT_RATIO_B]))
     cg.add(var.set_voltage_ratio(config[CONF_VOLTAGE_RATIO]))
     channel = config[CONF_METER_CHANNEL]
-    if isinstance(channel, bool):
-        cg.add(var.set_channel_b(channel))
-    else:
+    # cv.enum leaves the config text ("A" or "B") and stores the mapped bool on enum_value.
+    # A select block arrives as a dict.
+    if isinstance(channel, dict):
         cg.add(var.set_channel_b(channel[CONF_INITIAL_OPTION] == "B"))
         sel = await select.new_select(channel, options=["A", "B"])
         await cg.register_component(sel, channel)
         await cg.register_parented(sel, var)
         cg.add(var.set_channel_select(sel))
+    else:
+        cg.add(var.set_channel_b(channel.enum_value))
 
     for key, setter in (
         (CONF_VOLTAGE, var.set_voltage_sensor),
