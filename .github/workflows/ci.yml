@@ -38,8 +38,8 @@ jobs:
       - name: Write Wi-Fi secrets
         run: |
           cat > hlw8112_spi/secrets.yaml <<'EOF'
-          wifi_ssid: "ci"
-          wifi_password: "ci"
+          wifi_ssid: "ci-network"
+          wifi_password: "ci-password"
           EOF
 
       - name: Compile
