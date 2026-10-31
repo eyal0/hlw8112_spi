@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    name: Compile t1-u-hl.yaml
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # t1-u-hl.yaml loads this repo from ./components and bk72xx_spi from
+      # ../bk72xx_spi/components. Both checkouts stay inside the workspace so
+      # the ESPHome container, which only mounts that directory, can see them.
+      - name: Checkout hlw8112_spi
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: hlw8112_spi
+
+      - name: Checkout bk72xx_spi
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: eyal0/bk72xx_spi
+          ref: main
+          path: bk72xx_spi
+
+      - name: Write Wi-Fi secrets
+        run: |
+          cat > hlw8112_spi/secrets.yaml <<'EOF'
+          wifi_ssid: "ci"
+          wifi_password: "ci"
+          EOF
+
+      - name: Compile
+        uses: esphome/build-action@ae5408cdbc4f70692bf8e345c4982bca05a93667 # v8.1.0
+        with:
+          yaml-file: hlw8112_spi/t1-u-hl.yaml
