@@ -161,13 +161,13 @@ bool HLW8112SPI::load_coefficients_() {
   const double k_voltage = this->voltage_ratio_;
   const double k_current_a = this->current_ratio_a_;
   const double k_current_b = this->current_ratio_b_;
-  const double k_apparent = this->channel_b_ ? k_current_b : k_current_a;
+  this->power_sc_ = power_sc;
   this->volts_per_count_ = static_cast<double>(rms_uc) / (k_voltage * RMS_U_FULL_SCALE * 100.0);
   this->amps_per_count_a_ = static_cast<double>(rms_iac) / (k_current_a * RMS_I_FULL_SCALE * 1000.0);
   this->amps_per_count_b_ = static_cast<double>(rms_ibc) / (k_current_b * RMS_I_FULL_SCALE * 1000.0);
   this->watts_per_count_a_ = static_cast<double>(power_pac) / (k_current_a * k_voltage * POWER_FULL_SCALE);
   this->watts_per_count_b_ = static_cast<double>(power_pbc) / (k_current_b * k_voltage * POWER_FULL_SCALE);
-  this->va_per_count_ = static_cast<double>(power_sc) / (k_apparent * k_voltage * POWER_FULL_SCALE);
+  this->apply_apparent_scale_();
   this->kwh_per_count_a_ =
       static_cast<double>(energy_ac) * static_cast<double>(hfconst) / (k_current_a * k_voltage * ENERGY_FULL_SCALE * 4096.0);
   this->kwh_per_count_b_ =
@@ -178,6 +178,36 @@ bool HLW8112SPI::load_coefficients_() {
                 static_cast<unsigned>(rms_iac), static_cast<unsigned>(rms_ibc), static_cast<unsigned>(rms_uc),
                 static_cast<unsigned>(power_pac), static_cast<unsigned>(power_pbc), static_cast<unsigned>(power_sc),
                 static_cast<unsigned>(energy_ac), static_cast<unsigned>(energy_bc), static_cast<unsigned>(hfconst));
+  return true;
+}
+
+void HLW8112SPI::apply_apparent_scale_() {
+  const double k_current = this->channel_b_ ? this->current_ratio_b_ : this->current_ratio_a_;
+  this->va_per_count_ = static_cast<double>(this->power_sc_) /
+                        (k_current * static_cast<double>(this->voltage_ratio_) * POWER_FULL_SCALE);
+}
+
+bool HLW8112SPI::set_meter_channel(bool channel_b) {
+  if (!this->ready_) {
+    return false;
+  }
+  if (this->channel_b_ != channel_b) {
+    if (!this->command_(channel_b ? CMD_SELECT_B : CMD_SELECT_A)) {
+      ESP_LOGE(TAG, "Channel select failed");
+      return false;
+    }
+    this->channel_b_ = channel_b;
+    this->apply_apparent_scale_();
+    ESP_LOGI(TAG, "Shared channel: %s", channel_b ? "B" : "A");
+    this->update();
+  }
+  if (this->channel_select_ != nullptr) {
+    const size_t index = channel_b ? 1 : 0;
+    const auto current = this->channel_select_->active_index();
+    if (!current.has_value() || current.value() != index) {
+      this->channel_select_->publish_state(index);
+    }
+  }
   return true;
 }
 
@@ -392,6 +422,42 @@ void HLW8112SPI::dump_config() {
   LOG_SENSOR("  ", "Energy B", this->energy_b_sensor_);
   LOG_SENSOR("  ", "Energy Export A", this->energy_export_a_sensor_);
   LOG_SENSOR("  ", "Energy Export B", this->energy_export_b_sensor_);
+  LOG_SELECT("  ", "Meter Channel", this->channel_select_);
+}
+
+static constexpr uint32_t CHANNEL_PREF_VERSION = 0x484C5701;
+
+void MeterChannelSelect::setup() {
+  if (this->parent_ == nullptr) {
+    ESP_LOGE(TAG, "Meter channel select has no meter");
+    this->mark_failed();
+    return;
+  }
+  this->pref_ = this->make_entity_preference<uint8_t>(CHANNEL_PREF_VERSION);
+  uint8_t stored = 0;
+  bool channel_b = this->parent_->is_channel_b();
+  if (this->pref_.load(&stored) && stored <= 1) {
+    channel_b = stored == 1;
+  }
+  if (!this->parent_->set_meter_channel(channel_b)) {
+    ESP_LOGW(TAG, "Could not restore meter channel");
+    const size_t index = this->parent_->is_channel_b() ? 1 : 0;
+    this->publish_state(index);
+  }
+}
+
+void MeterChannelSelect::control(size_t index) {
+  if (index > 1 || this->parent_ == nullptr) {
+    return;
+  }
+  if (!this->parent_->set_meter_channel(index == 1)) {
+    ESP_LOGW(TAG, "Could not set meter channel");
+    return;
+  }
+  const uint8_t stored = index == 1 ? 1 : 0;
+  if (!this->pref_.save(&stored) || !global_preferences->sync()) {
+    ESP_LOGW(TAG, "Could not store meter channel");
+  }
 }
 
 }  // namespace esphome::hlw8112_spi

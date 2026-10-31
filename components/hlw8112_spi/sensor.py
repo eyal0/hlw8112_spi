@@ -1,11 +1,12 @@
 from esphome import pins
 import esphome.codegen as cg
-from esphome.components import sensor
+from esphome.components import select, sensor
 from esphome.components.bk72xx_spi import BK72xxSPI
 import esphome.config_validation as cv
 from esphome.const import (
     CONF_FREQUENCY,
     CONF_ID,
+    CONF_INITIAL_OPTION,
     CONF_PHASE_ANGLE,
     CONF_POWER_FACTOR,
     CONF_SPI_ID,
@@ -17,6 +18,7 @@ from esphome.const import (
     DEVICE_CLASS_POWER,
     DEVICE_CLASS_POWER_FACTOR,
     DEVICE_CLASS_VOLTAGE,
+    ENTITY_CATEGORY_CONFIG,
     STATE_CLASS_MEASUREMENT,
     STATE_CLASS_TOTAL_INCREASING,
     UNIT_AMPERE,
@@ -30,6 +32,7 @@ from esphome.const import (
 from esphome.types import ConfigType
 
 DEPENDENCIES = ["bk72xx_spi"]
+AUTO_LOAD = ["select"]
 
 CONF_CS_PIN = "cs_pin"
 CONF_SPI_FREQUENCY = "spi_frequency"
@@ -50,6 +53,9 @@ CONF_ENERGY_EXPORT_B = "energy_export_b"
 
 hlw8112_spi_ns = cg.esphome_ns.namespace("hlw8112_spi")
 HLW8112SPI = hlw8112_spi_ns.class_("HLW8112SPI", cg.PollingComponent, cg.Parented.template(BK72xxSPI))
+MeterChannelSelect = hlw8112_spi_ns.class_(
+    "MeterChannelSelect", cg.Component, select.Select, cg.Parented.template(HLW8112SPI)
+)
 
 
 def _measurement(unit: str, accuracy: int, device_class: str):
@@ -80,7 +86,18 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_CURRENT_RATIO_A, default=0.2): cv.positive_float,
         cv.Optional(CONF_CURRENT_RATIO_B, default=0.2): cv.positive_float,
         cv.Optional(CONF_VOLTAGE_RATIO, default=1.0): cv.positive_float,
-        cv.Optional(CONF_METER_CHANNEL, default="A"): cv.enum({"A": False, "B": True}, upper=True),
+        cv.Optional(CONF_METER_CHANNEL, default="A"): cv.Any(
+            cv.enum({"A": False, "B": True}, upper=True),
+            select.select_schema(
+                MeterChannelSelect,
+                entity_category=ENTITY_CATEGORY_CONFIG,
+                icon="mdi:swap-horizontal",
+            ).extend(
+                {
+                    cv.Optional(CONF_INITIAL_OPTION, default="A"): cv.one_of("A", "B", upper=True),
+                }
+            ),
+        ),
         cv.Optional(CONF_VOLTAGE): _measurement(UNIT_VOLT, 1, DEVICE_CLASS_VOLTAGE),
         cv.Optional(CONF_FREQUENCY): _measurement(UNIT_HERTZ, 2, DEVICE_CLASS_FREQUENCY),
         cv.Optional(CONF_CURRENT_A): _measurement(UNIT_AMPERE, 3, DEVICE_CLASS_CURRENT),
@@ -118,7 +135,15 @@ async def to_code(config: ConfigType) -> None:
     cg.add(var.set_current_ratio_a(config[CONF_CURRENT_RATIO_A]))
     cg.add(var.set_current_ratio_b(config[CONF_CURRENT_RATIO_B]))
     cg.add(var.set_voltage_ratio(config[CONF_VOLTAGE_RATIO]))
-    cg.add(var.set_channel_b(config[CONF_METER_CHANNEL]))
+    channel = config[CONF_METER_CHANNEL]
+    if isinstance(channel, bool):
+        cg.add(var.set_channel_b(channel))
+    else:
+        cg.add(var.set_channel_b(channel[CONF_INITIAL_OPTION] == "B"))
+        sel = await select.new_select(channel, options=["A", "B"])
+        await cg.register_component(sel, channel)
+        await cg.register_parented(sel, var)
+        cg.add(var.set_channel_select(sel))
 
     for key, setter in (
         (CONF_VOLTAGE, var.set_voltage_sensor),

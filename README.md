@@ -123,7 +123,9 @@ sensor:
     current_ratio_a: 0.2
     current_ratio_b: 0.2
     voltage_ratio: 1.0
-    meter_channel: A
+    # A or B fixes the shared channel. A name makes it a Home Assistant control.
+    meter_channel:
+      name: Meter Channel
 
     voltage:
       name: Voltage
@@ -137,8 +139,8 @@ sensor:
       name: Power A
     power_b:
       name: Power B
-    # Volt-amps for meter_channel only. The chip has one apparent-power register,
-    # so this follows channel A until meter_channel is set to B. Power factor uses
+    # Volt-amps for the shared channel only. The chip has one apparent-power
+    # register, so this follows Meter Channel. Power factor and phase angle use
     # that same channel.
     apparent_power:
       name: Apparent Power
@@ -177,9 +179,9 @@ SCK, MOSI, and MISO belong to the one `bk72xx_spi` bus. A second HLW8112 is anot
 | `chip_clock` | `3579545` | HLW8112 crystal, in Hz. Used only to convert the frequency register. |
 | `current_ratio_a`, `current_ratio_b` | `0.2` | K1 in the datasheet's calibration-free formulas. These match the OpenBeken clamp-meter defaults. If a current reads high, raise that channel's ratio by the same factor. |
 | `voltage_ratio` | `1.0` | K2, the voltage-divider ratio relative to 1 kΩ / 1 MΩ. |
-| `meter_channel` | `A` | Which current channel supplies the single apparent-power, power-factor, and phase-angle measurement. |
+| `meter_channel` | `A` | Shared channel for apparent power, power factor, and phase angle. `A` or `B` fixes it. A block with `name` is a Home Assistant select; `initial_option` (default `A`) is used until a choice is saved, and that choice is restored on boot. |
 
-`current_a`, `current_b`, `power_a`, and `power_b` are independent. Apparent power is volt-amps for `meter_channel` only. The chip has one apparent-power register, so channel B's apparent power is published only when `meter_channel: B`. Power factor uses that same channel.
+`current_a`, `current_b`, `power_a`, and `power_b` are independent. Apparent power is volt-amps for the shared channel only. The chip has one apparent-power register, so channel B's apparent power is published only while that channel is selected. Power factor and phase angle use that same channel. Changing the select sends the chip's channel command and reads those shared registers again.
 
 Optional sensors not included in the example:
 

@@ -46,7 +46,9 @@ sensor:
     current_ratio_a: 0.2
     current_ratio_b: 0.2
     voltage_ratio: 1.0
-    meter_channel: A
+    # A or B fixes the shared channel. A name makes it a Home Assistant control.
+    meter_channel:
+      name: Meter Channel
 
     voltage:
       name: Voltage
@@ -60,9 +62,8 @@ sensor:
       name: Power A
     power_b:
       name: Power B
-    # Volt-amps for meter_channel only. The chip has one apparent-power register,
-    # so this follows channel A until meter_channel is set to B. Power factor uses
-    # that same channel.
+    # Volt-amps for the shared channel only. The chip has one apparent-power
+    # register, so this follows Meter Channel. Power factor uses that same channel.
     apparent_power:
       name: Apparent Power
     power_factor:

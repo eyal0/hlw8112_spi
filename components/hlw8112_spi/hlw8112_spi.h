@@ -5,6 +5,7 @@
 #include "esphome/core/helpers.h"
 #include "esphome/core/preferences.h"
 #include "esphome/components/bk72xx_spi/bk72xx_spi.h"
+#include "esphome/components/select/select.h"
 #include "esphome/components/sensor/sensor.h"
 
 namespace esphome::hlw8112_spi {
@@ -51,6 +52,11 @@ class HLW8112SPI : public PollingComponent, public Parented<bk72xx_spi::BK72xxSP
   void reset_energy_a();
   void reset_energy_b();
 
+  // False is channel A. Sends the chip's channel-select command once the meter is ready.
+  bool set_meter_channel(bool channel_b);
+  bool is_channel_b() const { return this->channel_b_; }
+  void set_channel_select(select::Select *channel_select) { this->channel_select_ = channel_select; }
+
  protected:
   GPIOPin *cs_pin_{nullptr};
   uint32_t spi_frequency_{500000};
@@ -74,6 +80,7 @@ class HLW8112SPI : public PollingComponent, public Parented<bk72xx_spi::BK72xxSP
   sensor::Sensor *energy_b_sensor_{nullptr};
   sensor::Sensor *energy_export_a_sensor_{nullptr};
   sensor::Sensor *energy_export_b_sensor_{nullptr};
+  select::Select *channel_select_{nullptr};
 
   // Counts converted with the datasheet calibration-free formulas.
   double volts_per_count_{0};
@@ -84,6 +91,7 @@ class HLW8112SPI : public PollingComponent, public Parented<bk72xx_spi::BK72xxSP
   double va_per_count_{0};
   double kwh_per_count_a_{0};
   double kwh_per_count_b_{0};
+  uint32_t power_sc_{0};
 
   EnergyStore energy_{};
   ESPPreferenceObject energy_pref_{};
@@ -94,6 +102,7 @@ class HLW8112SPI : public PollingComponent, public Parented<bk72xx_spi::BK72xxSP
 
   bool configure_chip_();
   bool load_coefficients_();
+  void apply_apparent_scale_();
   bool read_register_(uint8_t address, uint32_t *value, uint8_t size);
   bool write_register16_(uint8_t address, uint16_t value);
   bool command_(uint8_t command);
@@ -101,6 +110,17 @@ class HLW8112SPI : public PollingComponent, public Parented<bk72xx_spi::BK72xxSP
   void publish_(sensor::Sensor *sensor, float value);
   void accumulate_energy_(double *total, sensor::Sensor *sensor, double kwh);
   void save_energy_(bool force);
+};
+
+// Home Assistant control for the shared channel. Setup runs after the meter.
+class MeterChannelSelect : public Component, public select::Select, public Parented<HLW8112SPI> {
+ public:
+  void setup() override;
+  void control(size_t index) override;
+  float get_setup_priority() const override { return setup_priority::DATA; }
+
+ protected:
+  ESPPreferenceObject pref_{};
 };
 
 }  // namespace esphome::hlw8112_spi
