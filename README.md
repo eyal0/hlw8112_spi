@@ -168,6 +168,8 @@ button:
 
 `t1-u-hl.yaml` in this repo loads `hlw8112_spi` from this checkout and `bk72xx_spi` from a sibling `../bk72xx_spi` checkout. ESPHome caches a GitHub clone for a day; set `refresh: 0s` on that `external_components` entry to pick up a push immediately.
 
+[`t1-u-hl-current-threshold.yaml`](t1-u-hl-current-threshold.yaml) is that config with a current threshold. Current, power, apparent power, and power factor publish as 0 while the channel current is below `no_load_current`.
+
 SCK, MOSI, and MISO belong to the one `bk72xx_spi` bus. A second HLW8112 is another `sensor` entry with its own `cs_pin`. Another kind of chip uses that same `spi_id` and its own `cs_pin`. Its driver calls `transfer()` with the clock and SPI mode that chip requires.
 
 | Key | Default | Meaning |
